@@ -468,23 +468,23 @@ class MPLMatFile(MatFile):
         MPL_internal_throats = sp.where((self['throat.type']==0) & (self['throat.material']==1))[0]
         MPL_internal_geom = OpenPNM.Geometry.GenericGeometry(network=self,pores=MPL_internal_pores,throats=MPL_internal_throats,name='MPL_internal')
         MPL_internal_geom['pore.diameter'] = sp.ravel(sp.array(self._dictionary['pdiameter'][self._pore_map[MPL_internal_pores]],float))
-#        MPL_internal_geom['pore.area'] = 1e12
-        MPL_internal_geom['pore.area'] = MPL_internal_geom['pore.diameter']**2
+        MPL_internal_geom['pore.area'] = 1e12
+#        MPL_internal_geom['pore.area'] = MPL_internal_geom['pore.diameter']**2
         MPL_internal_geom['pore.volume'] = sp.ravel(sp.array(self._dictionary['pvolume'][self._pore_map[MPL_internal_pores]],float))
         MPL_internal_geom['throat.area'] = sp.ravel(sp.array(self._dictionary['tmplarea'][self._throat_map[MPL_internal_throats]],float))        
         MPL_internal_geom['throat.diameter'] = 1e-12
-#        MPL_internal_geom['throat.length'] = d_centers[MPL_internal_throats]
-        MPL_internal_geom['throat.length'] = 1e-12
+        MPL_internal_geom['throat.length'] = d_centers[MPL_internal_throats]
+#        MPL_internal_geom['throat.length'] = 1e-12
 
         if add_MPL_boundaries:
             MPL_boundary_pores = sp.where((self['pore.type']!=0) & (self['pore.material']==1))[0]
             MPL_boundary_throats = sp.where((self['throat.type']!=0) & (self['throat.material']==1))[0]
             MPL_boundary_geom = OpenPNM.Geometry.Boundary(network=self,pores=MPL_boundary_pores,throats=MPL_boundary_throats,name='MPL_boundary')
-#            MPL_boundary_geom['pore.area'] = 1e12
+            MPL_boundary_geom['pore.area'] = 1e12
             MPL_boundary_geom['throat.area'] = sp.ravel(sp.array(self._dictionary['tmplarea'][self._throat_map[MPL_boundary_throats]],float))
             MPL_boundary_geom['throat.diameter'] = 1e-12
-#            MPL_boundary_geom['throat.length'] = d_centers[MPL_boundary_throats]
-            MPL_boundary_geom['throat.length'] = 1e-12
+            MPL_boundary_geom['throat.length'] = d_centers[MPL_boundary_throats]
+#            MPL_boundary_geom['throat.length'] = 1e-12
             self['pore.MPL_top_boundary']=self.tomask(pores=self.pores(['MPL_top','MPL_boundary'],mode='intersection'))
             self['pore.MPL_bottom_boundary']=self.tomask(pores=self.pores(['MPL_bottom','MPL_boundary'],mode='intersection'))
             self['pore.MPL_left_boundary']=self.tomask(pores=self.pores(['MPL_left','MPL_boundary'],mode='intersection'))
