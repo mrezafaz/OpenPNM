@@ -50,9 +50,9 @@ def conduit_conductance(physics,
     """
     throats = phase.throats(physics.name)
     if (mode == 'loose'):
-        closed_conduits = -sp.array(phase[throat_occupancy],dtype=bool)
+        closed_conduits = -sp.array(phase[throat_occupancy][phase.throats(physics.name)],dtype=bool)
     else:
-        throats_closed = -sp.array(phase[throat_occupancy],dtype=bool)
+        throats_closed = -sp.array(phase[throat_occupancy][phase.throats(physics.name)],dtype=bool)
         connected_pores = network.find_connected_pores(throats)
         pores_1 = connected_pores[:,0]
         pores_2 = connected_pores[:,1]
@@ -64,7 +64,7 @@ def conduit_conductance(physics,
         if(mode == 'strict'):
             closed_conduits = pores_1_closed | throats_closed | pores_2_closed
     open_conduits = -closed_conduits
-    throat_value = phase[throat_conductance]
+    throat_value = phase[throat_conductance][phase.throats(physics.name)]
     value = throat_value*open_conduits + throat_value*closed_conduits*factor
     return value
 
