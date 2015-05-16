@@ -173,8 +173,8 @@ class MatFile(GenericNetwork):
         try:
             boundary_pores = sp.where(self['pore.type']!=0)[0]
             boundary_throats = sp.where(self['throat.type']!=0)[0]
-            self['throat.top'] = sp.ravel(self['throat.type']==1)
-            self['throat.bottom'] = sp.ravel(self['throat.type']==6)
+            self['throat.top'] = sp.ravel(self['throat.type']==6)
+            self['throat.bottom'] = sp.ravel(self['throat.type']==1)
             self['throat.left'] = sp.ravel(self['throat.type']==2)
             self['throat.right'] = sp.ravel(self['throat.type']==5)
             self['throat.front'] = sp.ravel(self['throat.type']==3)
@@ -193,7 +193,7 @@ class MatFile(GenericNetwork):
             add_boundaries = False
         Ps = sp.where([pore not in boundary_pores for pore in self.pores()])[0]
         Ts = sp.where([throat not in boundary_throats for throat in self.throats()])[0]
-        geom = OpenPNM.Geometry.GenericGeometry(network=self,pores=Ps,throats=Ts)
+        geom = OpenPNM.Geometry.GenericGeometry(network=self,pores=Ps,throats=Ts,name='internal')
         geom['pore.volume'] = sp.ravel(sp.array(self._dictionary['pvolume'][self._pore_map[Ps]],float))
         geom['pore.diameter'] = sp.ravel(sp.array(self._dictionary['pdiameter'][self._pore_map[Ps]],float))
         geom['throat.diameter'] = sp.ravel(sp.array(self._dictionary['tdiameter'][self._throat_map[Ts]],float))
@@ -201,7 +201,7 @@ class MatFile(GenericNetwork):
         geom.add_model(propname='throat.area',model=OpenPNM.Geometry.models.throat_area.cylinder)
 
         if add_boundaries:
-            boun = OpenPNM.Geometry.Boundary(network=self,pores=boundary_pores,throats=boundary_throats,name='boundary')
+            OpenPNM.Geometry.Boundary(network=self,pores=boundary_pores,throats=boundary_throats,name='boundary')
             self['pore.top_boundary']=self.tomask(pores=self.pores(['top','boundary'],mode='intersection'))
             self['pore.bottom_boundary']=self.tomask(pores=self.pores(['bottom','boundary'],mode='intersection'))
             self['pore.left_boundary']=self.tomask(pores=self.pores(['left','boundary'],mode='intersection'))
@@ -324,7 +324,190 @@ class MatFile(GenericNetwork):
             logger.warning('The supplied pores are not coplanar. Area will be approximate')
             pass
         return A
+        
+class MPLMatFile(MatFile):
+    r"""
+    MPLMatFile
 
+    Parameters
+    ----------
+
+    Examples
+    ---------
+
+    Notes
+    ------
+    Matfiles should include the following variables
+
+    +----------------+------------+----------------------------------+
+    | Variable Name  | Value      | Description                      |
+    +================+============+==================================+
+    | pcoords        | <Npx3>     | physical coordinates, in meters, |
+    |                | float      | of pores to be imported          |
+    +----------------+------------+----------------------------------+
+    | pdiameter      | <Npx1>     | pore diamters, in meters         |
+    |                | float      |                                  |
+    +----------------+------------+----------------------------------+
+    | pvolume        | <Npx1>     | pore volumes, in cubic meters    |
+    |                | float      |                                  |
+    +----------------+------------+----------------------------------+
+    | pnumbering     | <Npx1>     | = 0:1:Np-1                       |
+    |                | int        |                                  |
+    +----------------+------------+----------------------------------+
+    | ptype          | <Npx1>     | (optional) designates surfaces   |
+    |                | int        | of pores in network.             |
+    |                |            | (more details below)             |
+    +----------------+------------+----------------------------------+
+    | pmaterial      | <Npx1>     | binary array: 0 is GDL pore      |
+    |                | int        | 1 is MPL element                 |
+    +----------------+------------+----------------------------------+
+    | tconnections   | <Ntx2>     | pore numbers of the two pores    |
+    |                | int        | that each throat connects        |
+    +----------------+------------+----------------------------------+
+    | tdiameter      | <Ntx1>     | throat diameters, in meters      |
+    |                | float      |                                  |
+    +----------------+------------+----------------------------------+
+    | tnumbering     | <Ntx1>     | = 0:1:Nt-1                       |
+    |                | int        |                                  |
+    +----------------+------------+----------------------------------+
+    | ttype          | <Ntx1>     | (optional) designates surfaces   |
+    |                | int        | of throats in network.           |
+    |                |            | (more details below)             |
+    +----------------+------------+----------------------------------+
+    | tmaterial      | <Ntx1>     | indicates the type of connection |
+    |                | int        | 0 is GDL pore - GDL pore         |
+    |                |            | 1 is MPL element - MPL element   |
+    |                |            | 2 is GDL pore - MPL element      |
+    +----------------+------------+----------------------------------+
+    | tmplarea       | <Ntx1>     | contact area between each MPL    |
+    |                | int        | element and its neighbour MPL    |
+    |                |            | element/GL pore                  |
+    +----------------+------------+----------------------------------+
+    """
+
+    def __init__(self,**kwargs):
+
+        r"""
+        """
+        super(MPLMatFile,self).__init__(**kwargs)
+        
+    def _add_geometry(self):
+        self._add_GDL_geometry()
+        self._add_MPL_geometry()
+        self._add_interface_geometry()
+        
+    def _add_GDL_geometry(self):
+        try:
+            self['throat.GDL_top'] = sp.ravel((self['throat.type']==6) & (self['throat.material']==0))
+            self['throat.GDL_bottom'] = sp.ravel((self['throat.type']==1) & (self['throat.material']==0))
+            self['throat.GDL_left'] = sp.ravel((self['throat.type']==2) & (self['throat.material']==0))
+            self['throat.GDL_right'] = sp.ravel((self['throat.type']==5) & (self['throat.material']==0))
+            self['throat.GDL_front'] = sp.ravel((self['throat.type']==3) & (self['throat.material']==0))
+            self['throat.GDL_back'] = sp.ravel((self['throat.type']==4) & (self['throat.material']==0))
+            self['pore.GDL_top'] = self.tomask(sp.ravel(self.find_connected_pores(self.throats('GDL_top'))))
+            self['pore.GDL_bottom'] = self.tomask(sp.ravel(self.find_connected_pores(self.throats('GDL_bottom'))))
+            self['pore.GDL_left'] = self.tomask(sp.ravel(self.find_connected_pores(self.throats('GDL_left'))))
+            self['pore.GDL_right'] = self.tomask(sp.ravel(self.find_connected_pores(self.throats('GDL_right'))))
+            self['pore.GDL_front'] = self.tomask(sp.ravel(self.find_connected_pores(self.throats('GDL_front'))))
+            self['pore.GDL_back'] = self.tomask(sp.ravel(self.find_connected_pores(self.throats('GDL_back'))))
+            add_GDL_boundaries = True
+        except:
+            logger.info('No boundary pores added.')
+            add_GDL_boundaries = False
+        GDL_internal_pores = sp.where((self['pore.type']==0) & (self['pore.material']==0))[0]
+        GDL_internal_throats = sp.where((self['throat.type']==0) & (self['throat.material']==0))[0]
+        GDL_internal_geom = OpenPNM.Geometry.GenericGeometry(network=self,pores=GDL_internal_pores,throats=GDL_internal_throats,name='GDL_internal')
+        GDL_internal_geom['pore.volume'] = sp.ravel(sp.array(self._dictionary['pvolume'][self._pore_map[GDL_internal_pores]],float))
+        GDL_internal_geom['pore.diameter'] = sp.ravel(sp.array(self._dictionary['pdiameter'][self._pore_map[GDL_internal_pores]],float))
+        GDL_internal_geom['throat.diameter'] = sp.ravel(sp.array(self._dictionary['tdiameter'][self._throat_map[GDL_internal_throats]],float))
+        GDL_internal_geom.add_model(propname='pore.area',model=OpenPNM.Geometry.models.pore_area.spherical)
+        GDL_internal_geom.add_model(propname='throat.area',model=OpenPNM.Geometry.models.throat_area.cylinder)
+
+        if add_GDL_boundaries:
+            GDL_boundary_pores = sp.where((self['pore.type']!=0) & (self['pore.material']==0))[0]
+            GDL_boundary_throats = sp.where((self['throat.type']!=0) & (self['throat.material']==0))[0]
+            OpenPNM.Geometry.Boundary(network=self,pores=GDL_boundary_pores,throats=GDL_boundary_throats,name='GDL_boundary')
+            self['pore.GDL_top_boundary']=self.tomask(pores=self.pores(['GDL_top','GDL_boundary'],mode='intersection'))
+            self['pore.GDL_bottom_boundary']=self.tomask(pores=self.pores(['GDL_bottom','GDL_boundary'],mode='intersection'))
+            self['pore.GDL_left_boundary']=self.tomask(pores=self.pores(['GDL_left','GDL_boundary'],mode='intersection'))
+            self['pore.GDL_right_boundary']=self.tomask(pores=self.pores(['GDL_right','GDL_boundary'],mode='intersection'))
+            self['pore.GDL_front_boundary']=self.tomask(pores=self.pores(['GDL_front','GDL_boundary'],mode='intersection'))
+            self['pore.GDL_back_boundary']=self.tomask(pores=self.pores(['GDL_back','GDL_boundary'],mode='intersection'))
+        
+            self['throat.GDL_top_boundary']=self.tomask(throats=self.throats(['GDL_top','GDL_boundary'],mode='intersection'))
+            self['throat.GDL_bottom_boundary']=self.tomask(throats=self.throats(['GDL_bottom','GDL_boundary'],mode='intersection'))
+            self['throat.GDL_left_boundary']=self.tomask(throats=self.throats(['GDL_left','GDL_boundary'],mode='intersection'))
+            self['throat.GDL_right_boundary']=self.tomask(throats=self.throats(['GDL_right','GDL_boundary'],mode='intersection'))
+            self['throat.GDL_front_boundary']=self.tomask(throats=self.throats(['GDL_front','GDL_boundary'],mode='intersection'))
+            self['throat.GDL_back_boundary']=self.tomask(throats=self.throats(['GDL_back','GDL_boundary'],mode='intersection'))
+            
+    def _add_MPL_geometry(self):
+        Ps = self['throat.conns']
+        x = self['pore.coords'][:,0]
+        y = self['pore.coords'][:,1]
+        z = self['pore.coords'][:,2]
+        d_centers = sp.sqrt((x[Ps[:,1]]-x[Ps[:,0]])**2+(y[Ps[:,1]]-y[Ps[:,0]])**2+(z[Ps[:,1]]-z[Ps[:,0]])**2)
+        try:
+            self['throat.MPL_top'] = sp.ravel((self['throat.type']==6) & (self['throat.material']==1))
+            self['throat.MPL_bottom'] = sp.ravel((self['throat.type']==1) & (self['throat.material']==1))
+            self['throat.MPL_left'] = sp.ravel((self['throat.type']==2) & (self['throat.material']==1))
+            self['throat.MPL_right'] = sp.ravel((self['throat.type']==5) & (self['throat.material']==1))
+            self['throat.MPL_front'] = sp.ravel((self['throat.type']==3) & (self['throat.material']==1))
+            self['throat.MPL_back'] = sp.ravel((self['throat.type']==4) & (self['throat.material']==1))
+            self['pore.MPL_top'] = self.tomask(sp.ravel(self.find_connected_pores(self.throats('MPL_top'))))
+            self['pore.MPL_bottom'] = self.tomask(sp.ravel(self.find_connected_pores(self.throats('MPL_bottom'))))
+            self['pore.MPL_left'] = self.tomask(sp.ravel(self.find_connected_pores(self.throats('MPL_left'))))
+            self['pore.MPL_right'] = self.tomask(sp.ravel(self.find_connected_pores(self.throats('MPL_right'))))
+            self['pore.MPL_front'] = self.tomask(sp.ravel(self.find_connected_pores(self.throats('MPL_front'))))
+            self['pore.MPL_back'] = self.tomask(sp.ravel(self.find_connected_pores(self.throats('MPL_back'))))
+            add_MPL_boundaries = True
+        except:
+            logger.info('No boundary pores added.')
+            add_MPL_boundaries = False
+        MPL_internal_pores = sp.where((self['pore.type']==0) & (self['pore.material']==1))[0]
+        MPL_internal_throats = sp.where((self['throat.type']==0) & (self['throat.material']==1))[0]
+        MPL_internal_geom = OpenPNM.Geometry.GenericGeometry(network=self,pores=MPL_internal_pores,throats=MPL_internal_throats,name='MPL_internal')
+        MPL_internal_geom['pore.diameter'] = sp.ravel(sp.array(self._dictionary['pdiameter'][self._pore_map[MPL_internal_pores]],float))
+#        MPL_internal_geom['pore.area'] = 1e12
+        MPL_internal_geom['pore.area'] = MPL_internal_geom['pore.diameter']**2
+        MPL_internal_geom['pore.volume'] = sp.ravel(sp.array(self._dictionary['pvolume'][self._pore_map[MPL_internal_pores]],float))
+        MPL_internal_geom['throat.area'] = sp.ravel(sp.array(self._dictionary['tmplarea'][self._throat_map[MPL_internal_throats]],float))        
+        MPL_internal_geom['throat.diameter'] = 1e-12
+#        MPL_internal_geom['throat.length'] = d_centers[MPL_internal_throats]
+        MPL_internal_geom['throat.length'] = 1e-12
+
+        if add_MPL_boundaries:
+            MPL_boundary_pores = sp.where((self['pore.type']!=0) & (self['pore.material']==1))[0]
+            MPL_boundary_throats = sp.where((self['throat.type']!=0) & (self['throat.material']==1))[0]
+            MPL_boundary_geom = OpenPNM.Geometry.Boundary(network=self,pores=MPL_boundary_pores,throats=MPL_boundary_throats,name='MPL_boundary')
+#            MPL_boundary_geom['pore.area'] = 1e12
+            MPL_boundary_geom['throat.area'] = sp.ravel(sp.array(self._dictionary['tmplarea'][self._throat_map[MPL_boundary_throats]],float))
+            MPL_boundary_geom['throat.diameter'] = 1e-12
+#            MPL_boundary_geom['throat.length'] = d_centers[MPL_boundary_throats]
+            MPL_boundary_geom['throat.length'] = 1e-12
+            self['pore.MPL_top_boundary']=self.tomask(pores=self.pores(['MPL_top','MPL_boundary'],mode='intersection'))
+            self['pore.MPL_bottom_boundary']=self.tomask(pores=self.pores(['MPL_bottom','MPL_boundary'],mode='intersection'))
+            self['pore.MPL_left_boundary']=self.tomask(pores=self.pores(['MPL_left','MPL_boundary'],mode='intersection'))
+            self['pore.MPL_right_boundary']=self.tomask(pores=self.pores(['MPL_right','MPL_boundary'],mode='intersection'))
+            self['pore.MPL_front_boundary']=self.tomask(pores=self.pores(['MPL_front','MPL_boundary'],mode='intersection'))
+            self['pore.MPL_back_boundary']=self.tomask(pores=self.pores(['MPL_back','MPL_boundary'],mode='intersection'))
+        
+            self['throat.MPL_top_boundary']=self.tomask(throats=self.throats(['MPL_top','MPL_boundary'],mode='intersection'))
+            self['throat.MPL_bottom_boundary']=self.tomask(throats=self.throats(['MPL_bottom','MPL_boundary'],mode='intersection'))
+            self['throat.MPL_left_boundary']=self.tomask(throats=self.throats(['MPL_left','MPL_boundary'],mode='intersection'))
+            self['throat.MPL_right_boundary']=self.tomask(throats=self.throats(['MPL_right','MPL_boundary'],mode='intersection'))
+            self['throat.MPL_front_boundary']=self.tomask(throats=self.throats(['MPL_front','MPL_boundary'],mode='intersection'))
+            self['throat.MPL_back_boundary']=self.tomask(throats=self.throats(['MPL_back','MPL_boundary'],mode='intersection'))
+            
+    def _add_interface_geometry(self):
+        self['throat.interface'] = sp.ravel(self['throat.material']==2)
+        interface_throats = sp.where(self['throat.material']==2)[0]
+        interface_geom = OpenPNM.Geometry.GenericGeometry(network=self,pores=[],throats=interface_throats,name='interface')
+        interface_geom['throat.area'] = sp.ravel(sp.array(self._dictionary['tmplarea'][self._throat_map[interface_throats]],float))        
+        interface_geom['throat.diameter'] = 1e-12
+        interface_geom['throat.length'] = 1e-12
+        interface_geom['throat.volume'] = 0.0        
+    
 if __name__ == '__main__':
     import doctest
     doctest.testmod(verbose=True)
