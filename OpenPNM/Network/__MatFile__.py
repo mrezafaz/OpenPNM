@@ -381,7 +381,7 @@ class MPLMatFile(MatFile):
     +----------------+------------+----------------------------------+
     | tmplarea       | <Ntx1>     | contact area between each MPL    |
     |                | int        | element and its neighbour MPL    |
-    |                |            | element/GL pore                  |
+    |                |            | element/GDL pore                  |
     +----------------+------------+----------------------------------+
     """
 
@@ -443,10 +443,8 @@ class MPLMatFile(MatFile):
             
     def _add_MPL_geometry(self):
         Ps = self['throat.conns']
-        x = self['pore.coords'][:,0]
-        y = self['pore.coords'][:,1]
-        z = self['pore.coords'][:,2]
-        d_centers = sp.sqrt((x[Ps[:,1]]-x[Ps[:,0]])**2+(y[Ps[:,1]]-y[Ps[:,0]])**2+(z[Ps[:,1]]-z[Ps[:,0]])**2)
+        pcoords = self['pore.coords']
+        d_centers = sp.sqrt(sp.sum(sp.square(pcoords[Ps[:,0]]-pcoords[Ps[:,1]]),1))
         try:
             self['throat.MPL_top'] = sp.ravel((self['throat.type']==6) & (self['throat.material']==1))
             self['throat.MPL_bottom'] = sp.ravel((self['throat.type']==1) & (self['throat.material']==1))
@@ -468,23 +466,20 @@ class MPLMatFile(MatFile):
         MPL_internal_throats = sp.where((self['throat.type']==0) & (self['throat.material']==1))[0]
         MPL_internal_geom = OpenPNM.Geometry.GenericGeometry(network=self,pores=MPL_internal_pores,throats=MPL_internal_throats,name='MPL_internal')
         MPL_internal_geom['pore.diameter'] = sp.ravel(sp.array(self._dictionary['pdiameter'][self._pore_map[MPL_internal_pores]],float))
-        MPL_internal_geom['pore.area'] = 1e12
-#        MPL_internal_geom['pore.area'] = MPL_internal_geom['pore.diameter']**2
+        MPL_internal_geom['pore.area'] = MPL_internal_geom['pore.diameter']**2
         MPL_internal_geom['pore.volume'] = sp.ravel(sp.array(self._dictionary['pvolume'][self._pore_map[MPL_internal_pores]],float))
         MPL_internal_geom['throat.area'] = sp.ravel(sp.array(self._dictionary['tmplarea'][self._throat_map[MPL_internal_throats]],float))        
         MPL_internal_geom['throat.diameter'] = 1e-12
-        MPL_internal_geom['throat.length'] = d_centers[MPL_internal_throats]
-#        MPL_internal_geom['throat.length'] = 1e-12
+        MPL_internal_geom['throat.length'] = d_centers[MPL_internal_throats]/10
 
         if add_MPL_boundaries:
             MPL_boundary_pores = sp.where((self['pore.type']!=0) & (self['pore.material']==1))[0]
             MPL_boundary_throats = sp.where((self['throat.type']!=0) & (self['throat.material']==1))[0]
             MPL_boundary_geom = OpenPNM.Geometry.Boundary(network=self,pores=MPL_boundary_pores,throats=MPL_boundary_throats,name='MPL_boundary')
-            MPL_boundary_geom['pore.area'] = 1e12
             MPL_boundary_geom['throat.area'] = sp.ravel(sp.array(self._dictionary['tmplarea'][self._throat_map[MPL_boundary_throats]],float))
             MPL_boundary_geom['throat.diameter'] = 1e-12
-            MPL_boundary_geom['throat.length'] = d_centers[MPL_boundary_throats]
-#            MPL_boundary_geom['throat.length'] = 1e-12
+            MPL_boundary_geom['throat.length'] = d_centers[MPL_boundary_throats]/10
+
             self['pore.MPL_top_boundary']=self.tomask(pores=self.pores(['MPL_top','MPL_boundary'],mode='intersection'))
             self['pore.MPL_bottom_boundary']=self.tomask(pores=self.pores(['MPL_bottom','MPL_boundary'],mode='intersection'))
             self['pore.MPL_left_boundary']=self.tomask(pores=self.pores(['MPL_left','MPL_boundary'],mode='intersection'))
@@ -500,12 +495,15 @@ class MPLMatFile(MatFile):
             self['throat.MPL_back_boundary']=self.tomask(throats=self.throats(['MPL_back','MPL_boundary'],mode='intersection'))
             
     def _add_interface_geometry(self):
+        Ps = self['throat.conns']
+        pcoords = self['pore.coords']
+        d_centers = sp.sqrt(sp.sum(sp.square(pcoords[Ps[:,0]]-pcoords[Ps[:,1]]),1))
         self['throat.interface'] = sp.ravel(self['throat.material']==2)
         interface_throats = sp.where(self['throat.material']==2)[0]
         interface_geom = OpenPNM.Geometry.GenericGeometry(network=self,pores=[],throats=interface_throats,name='interface')
         interface_geom['throat.area'] = sp.ravel(sp.array(self._dictionary['tmplarea'][self._throat_map[interface_throats]],float))        
         interface_geom['throat.diameter'] = 1e-12
-        interface_geom['throat.length'] = 1e-12
+        interface_geom['throat.length'] = d_centers[interface_throats]/10
         interface_geom['throat.volume'] = 0.0        
     
 if __name__ == '__main__':
